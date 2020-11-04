@@ -19,8 +19,8 @@ typedef struct GEOM_Vertex
     SDL_FPoint tex_coord;
 } GEOM_Vertex;
 
-int GEOM_RenderGeometry(SDL_Renderer * renderer, SDL_Texture *texture,
-                        GEOM_Vertex *vertices, int num_vertices, int* indices,
+int GEOM_RenderGeometry(SDL_Renderer *renderer, SDL_Texture *texture,
+                        GEOM_Vertex *vertices, int num_vertices, int *indices,
                         int num_indices);
 
 #ifdef __cplusplus

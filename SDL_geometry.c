@@ -260,8 +260,8 @@ static int DrawTriangle(SDL_Renderer * renderer, SDL_Texture *texture,
     return 0;
 }
 
-int GEOM_RenderGeometry(SDL_Renderer * renderer, SDL_Texture *texture,
-                        GEOM_Vertex *vertices, int num_vertices, int* indices,
+int GEOM_RenderGeometry(SDL_Renderer *renderer, SDL_Texture *texture,
+                        GEOM_Vertex *vertices, int num_vertices, int *indices,
                         int num_indices)
 {
     // TODO: check arguments are valid
