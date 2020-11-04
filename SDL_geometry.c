@@ -1,12 +1,13 @@
 #include "SDL_geometry.h"
+#include "SDL_assert.h"
 
-// TODO: put into SDL_pixels.h and add ref in SDL_Color documentation
+// SDL: put into SDL_pixels.h and add ref in SDL_Color documentation
 SDL_FORCE_INLINE SDL_bool GEOM_ColorEquals(SDL_Color left, SDL_Color right)
 {
     return left.r == right.r && left.g == right.g && left.b == right.b && left.a == right.a;
 }
 
-static int DrawTriangle(SDL_Renderer * renderer, SDL_Texture *texture,
+static void DrawTriangle(SDL_Renderer * renderer, SDL_Texture *texture,
                         GEOM_Vertex v1, GEOM_Vertex v2, GEOM_Vertex v3)
 {
     // This function operates in s28.4 fixed point: it's more precise than
@@ -257,27 +258,65 @@ static int DrawTriangle(SDL_Renderer * renderer, SDL_Texture *texture,
         SDL_SetTextureColorMod(texture, original_mod_r, original_mod_g, original_mod_b);
         SDL_SetTextureAlphaMod(texture, original_mod_a);
     }
-    return 0;
 }
+
+// SDL: in SDL_render.c
+#define CHECK_RENDERER_MAGIC(renderer, retval) \
+    SDL_assert(renderer); \
+    if (!renderer) { \
+        SDL_SetError("Invalid renderer"); \
+        return retval; \
+    }
+
+// SDL: in SDL_render.c
+#define CHECK_TEXTURE_MAGIC(texture, retval) \
+    SDL_assert(texture); \
+    if (!texture) { \
+        SDL_SetError("Invalid texture"); \
+        return retval; \
+    }
 
 int GEOM_RenderGeometry(SDL_Renderer *renderer, SDL_Texture *texture,
                         GEOM_Vertex *vertices, int num_vertices, int *indices,
                         int num_indices)
 {
-    // TODO: check arguments are valid
+    CHECK_RENDERER_MAGIC(renderer, -1);
+
+    if (texture) {
+        CHECK_TEXTURE_MAGIC(texture, -1);
+        // SDL:
+        // if (renderer != texture->renderer) {
+        //     SDL_SetError("Texture was not created with this renderer");
+        //     return -1;
+        // }
+    }
+
+    SDL_assert(vertices);
+    if (!vertices) {
+        SDL_SetError("RenderGeometry: vertices parameter can not be null");
+        return -1;
+    }
+
     if (indices) {
-        for (int i = 0; i + 3 <= num_indices; i += 3) {
-            // TODO: check return value
-            DrawTriangle(renderer, texture, vertices[indices[i]],
-                         vertices[indices[i+1]], vertices[indices[i+2]]);
+        SDL_assert(num_indices % 3 == 0);
+        if (num_indices % 3 != 0) {
+            SDL_SetError("RenderGeometry: num_indices parameter must be a multiple of 3");
+            return -1;
         }
     } else {
-        for (int i = 0; i + 3 <= num_vertices; i += 3) {
-            // TODO: check return value
-            DrawTriangle(renderer, texture, vertices[i], vertices[i+1], vertices[i+2]);
+        SDL_assert(num_vertices % 3 == 0);
+        if (num_vertices % 3 != 0) {
+            SDL_SetError("RenderGeometry: num_vertices parameter must be a multiple of 3 when not using indices");
+            return -1;
         }
     }
-    
-    
+
+    for (int i = 0; i + 3 <= (indices ? num_indices : num_vertices); i += 3) {
+        DrawTriangle(renderer, texture,
+                     vertices[indices ? indices[i] : i],
+                     vertices[indices ? indices[i+1] : i+1],
+                     vertices[indices ? indices[i+2] : i+2]);
+    }
+
     return 0;
 }
