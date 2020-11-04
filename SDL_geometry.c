@@ -293,7 +293,7 @@ static void DrawTriangle(SDL_Renderer * renderer, SDL_Texture *texture,
     }
 
 int GEOM_RenderGeometry(SDL_Renderer *renderer, SDL_Texture *texture,
-                        GEOM_Vertex *vertices, int num_vertices, int *indices,
+                        GEOM_Vertex *vertices, int num_vertices, Uint16 *indices,
                         int num_indices)
 {
     CHECK_RENDERER_MAGIC(renderer, -1);
