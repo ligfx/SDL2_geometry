@@ -1,5 +1,8 @@
 #include "SDL_geometry.h"
 #include "SDL_assert.h"
+#include "SDL_loadso.h"
+#include "SDL_opengl.h"
+#include "SDL_version.h"
 
 // SDL: put into SDL_pixels.h and add ref in SDL_Color documentation
 SDL_FORCE_INLINE SDL_bool GEOM_ColorEquals(SDL_Color left, SDL_Color right)
@@ -276,6 +279,138 @@ static void DrawTriangle(SDL_Renderer * renderer, SDL_Texture *texture,
     }
 }
 
+typedef struct GL_RenderData {
+    void (APIENTRY * glEnableClientState)(GLenum cap);
+    void (APIENTRY * glVertexPointer)(GLint size, GLenum type, GLsizei stride, const void *pointer);
+    void (APIENTRY * glColorPointer)(GLint size, GLenum type, GLsizei stride, const void *pointer);
+    void (APIENTRY * glTexCoordPointer)(GLint size, GLenum type, GLsizei stride, const void *pointer);
+    void (APIENTRY * glDrawElements)(GLenum mode, GLsizei count, GLenum type, const void *indices);
+    void (APIENTRY * glDrawArrays)(GLenum mode, GLint first, GLsizei count);
+    void (APIENTRY * glScalef)(GLfloat x, GLfloat y, GLfloat z);
+    void (APIENTRY * glPushMatrix)(void);
+    void (APIENTRY * glPopMatrix)(void);
+} GL_RenderData;
+
+static SDL_bool LoadOpenGL(GL_RenderData *data) {
+    // We need to load functions per-context on Windows. We don't have a simple
+    // way to do that / store the functions, so just load them every time.
+    // TODO: some drivers can return non-null even if function isn't available!
+#define LOAD_GL_FUNC(name) \
+    data->name = (typeof(data->name)) SDL_GL_GetProcAddress("" #name); \
+    if (!data->name) { \
+        return SDL_FALSE; \
+    }
+
+    LOAD_GL_FUNC(glEnableClientState);
+    LOAD_GL_FUNC(glVertexPointer);
+    LOAD_GL_FUNC(glColorPointer);
+    LOAD_GL_FUNC(glTexCoordPointer);
+    LOAD_GL_FUNC(glDrawElements);
+    LOAD_GL_FUNC(glDrawArrays);
+    LOAD_GL_FUNC(glScalef);
+    LOAD_GL_FUNC(glPushMatrix);
+    LOAD_GL_FUNC(glPopMatrix);
+
+#undef LOAD_GL_FUNC
+    return SDL_TRUE;
+}
+
+static int FakeRenderFlush(SDL_Renderer *renderer) {
+    return 0;
+}
+
+static int ForceRenderFlush(SDL_Renderer *renderer) {
+    SDL_Texture *tex = SDL_CreateTexture(renderer, 0, SDL_TEXTUREACCESS_TARGET, 1, 1);
+    if (!tex) {
+        return -1;
+    }
+    SDL_Texture *old_target = SDL_GetRenderTarget(renderer);
+    SDL_SetRenderTarget(renderer, tex);
+    SDL_SetRenderTarget(renderer, old_target);
+    SDL_DestroyTexture(tex);
+    return 0;
+}
+
+static int GEOM_RenderFlush(SDL_Renderer *renderer)
+{
+#if (SDL_MINOR_VERSION == 1 && SDL_PATCHLEVEL >= 10) || SDL_MINOR_VERSION > 0
+    return SDL_RenderFlush(renderer);
+#else
+    static int (SDLCALL * s_render_flush)(SDL_Renderer *renderer) = NULL;
+    if (!s_render_flush) {
+        SDL_version linked;
+        SDL_GetVersion(&linked);
+        if ((linked.minor == 0 && linked.patch >= 10) || linked.minor > 0) {
+            void *object = SDL_LoadObject(SDL_getenv("SDL_DYNAMIC_API"));
+            s_render_flush = SDL_LoadFunction(object, "SDL_RenderFlush");
+            if (!s_render_flush) {
+                SDL_UnloadObject(object);
+                object = SDL_LoadObject(NULL);
+                s_render_flush = SDL_LoadFunction(object, "SDL_RenderFlush");
+            }
+            if (!s_render_flush) {
+                SDL_UnloadObject(object);
+                fprintf(stderr,
+                        "SDL_Geometry: Couldn't load SDL_RenderFlush, will try "
+                        "to force render flushes by switching targets. This might"
+                        " be slow.\n");
+                s_render_flush = &ForceRenderFlush;
+            }
+        } else {
+            s_render_flush = &FakeRenderFlush;
+        }
+    }
+    return s_render_flush(renderer);
+#endif
+}
+
+static int GL_RenderGeometry(GL_RenderData *data, SDL_Renderer *renderer,
+                             SDL_Texture *texture, GEOM_Vertex *vertices,
+                             int num_vertices, Uint16 *indices, int num_indices)
+{
+    // SDL: GL_RenderData *data = (GL_RenderData *) renderer->driverdata;
+
+    // cheating way to activate renderer, bind texture, enable correct shader, etc
+    // TODO: better place to put this on screen? maybe do a blend mode that makes it not exist? or transparency?
+    // TODO: watch out for clip rect discarding this?
+    if (texture) {
+        SDL_Rect srcrect = {.x = 0, .y = 0, .w = 1, .h = 1};
+        SDL_Rect destrect = {.x = 0, .y = 0, .w = 1, .h = 1};
+        SDL_RenderCopy(renderer, texture, &srcrect, &destrect);
+    } else {
+        SDL_Rect destrect = {.x = 0, .y = 0, .w = 1, .h = 1};
+        SDL_RenderFillRect(renderer, &destrect);
+    }
+    GEOM_RenderFlush(renderer);
+
+    // SDL applies scale in software before it even gets to the render backends,
+    // so we have to do it here
+    float scale_x, scale_y;
+    SDL_RenderGetScale(renderer, &scale_x, &scale_y);
+    data->glPushMatrix();
+    data->glScalef(scale_x, scale_y, 1.0);
+
+    // TODO: disable these afterwards
+    if (texture) {
+        data->glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        data->glTexCoordPointer(2, GL_FLOAT, sizeof(GEOM_Vertex), &vertices[0].tex_coord);
+    }
+    data->glEnableClientState(GL_VERTEX_ARRAY);
+    data->glEnableClientState(GL_COLOR_ARRAY);
+    data->glVertexPointer(2, GL_FLOAT, sizeof(GEOM_Vertex), &vertices[0].position);
+    data->glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(GEOM_Vertex), &vertices[0].color);
+
+    if (indices) {
+        data->glDrawElements(GL_TRIANGLES, num_indices, GL_UNSIGNED_SHORT, indices);
+    } else {
+        data->glDrawArrays(GL_TRIANGLES, 0, num_vertices);
+    }
+
+    data->glPopMatrix();
+
+    return 0;
+}
+
 // SDL: in SDL_render.c
 #define CHECK_RENDERER_MAGIC(renderer, retval) \
     SDL_assert(renderer); \
@@ -324,6 +459,16 @@ int GEOM_RenderGeometry(SDL_Renderer *renderer, SDL_Texture *texture,
         if (num_vertices % 3 != 0) {
             SDL_SetError("RenderGeometry: num_vertices parameter must be a multiple of 3 when not using indices");
             return -1;
+        }
+    }
+
+    SDL_RendererInfo renderer_info;
+    SDL_GetRendererInfo(renderer, &renderer_info);
+    if (SDL_strcmp(renderer_info.name, "opengl") == 0) {
+        GL_RenderData data;
+        if (LoadOpenGL(&data)) {
+            return GL_RenderGeometry(&data, renderer, texture, vertices,
+                                     num_vertices, indices, num_indices);
         }
     }
 
