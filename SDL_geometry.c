@@ -10,6 +10,22 @@ SDL_FORCE_INLINE SDL_bool GEOM_ColorEquals(SDL_Color left, SDL_Color right)
 static void DrawTriangle(SDL_Renderer * renderer, SDL_Texture *texture,
                         GEOM_Vertex v1, GEOM_Vertex v2, GEOM_Vertex v3)
 {
+    const float minX = SDL_min(v1.position.x, SDL_min(v2.position.x, v3.position.x));
+    const float minY = SDL_min(v1.position.y, SDL_min(v2.position.y, v3.position.y));
+    const float maxX = SDL_max(v1.position.x, SDL_max(v2.position.x, v3.position.x));
+    const float maxY = SDL_max(v1.position.y, SDL_max(v2.position.y, v3.position.y));
+
+    // If we're outside the clip rect, then don't run the triangle rasterizer
+    if (SDL_RenderIsClipEnabled(renderer)) {
+        SDL_Rect clip_rect;
+        SDL_RenderGetClipRect(renderer, &clip_rect);
+        if ((minX > clip_rect.x + clip_rect.w || maxX < clip_rect.x) &&
+            (minY > clip_rect.y + clip_rect.h || maxY < clip_rect.y))
+        {
+            return;
+        }
+    }
+
     // This function operates in s28.4 fixed point: it's more precise than
     // floating point and often faster. This also effectively lets us work in
     // a subpixel space where each pixel is divided into 256 subpixels.
@@ -17,10 +33,10 @@ static void DrawTriangle(SDL_Renderer * renderer, SDL_Texture *texture,
 
     // Find integral bounding box, scale to fixed point. We use this to
     // iterate over all pixels possibly covered by the triangle.
-    const Sint32 minXf = SDL_floor(SDL_min(v1.position.x, SDL_min(v2.position.x, v3.position.x))) * 16;
-    const Sint32 minYf = SDL_floor(SDL_min(v1.position.y, SDL_min(v2.position.y, v3.position.y))) * 16;
-    const Sint32 maxXf = SDL_ceil(SDL_max(v1.position.x, SDL_max(v2.position.x, v3.position.x))) * 16;
-    const Sint32 maxYf = SDL_ceil(SDL_max(v1.position.y, SDL_max(v2.position.y, v3.position.y))) * 16;
+    const Sint32 minXf = SDL_floor(minX) * 16;
+    const Sint32 minYf = SDL_floor(minY) * 16;
+    const Sint32 maxXf = SDL_ceil(maxX) * 16;
+    const Sint32 maxYf = SDL_ceil(maxY) * 16;
 
     // Find center of bounding box, used for translating coordinates.
     // This accomplishes two things: 1) makes the fixed point calculations less
