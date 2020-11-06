@@ -4,6 +4,201 @@
 #include "SDL_opengl.h"
 #include "SDL_version.h"
 
+typedef struct SDL_SW_YUVTexture SDL_SW_YUVTexture;
+
+typedef struct SDL_Texture_2_0_12
+{
+    const void *magic;
+    Uint32 format;              /**< The pixel format of the texture */
+    int access;                 /**< SDL_TextureAccess */
+    int w;                      /**< The width of the texture */
+    int h;                      /**< The height of the texture */
+    int modMode;                /**< The texture modulation mode */
+    SDL_BlendMode blendMode;    /**< The texture blend mode */
+    SDL_ScaleMode scaleMode;    /**< The texture scale mode */
+    Uint8 r, g, b, a;           /**< Texture modulation values */
+
+    SDL_Renderer *renderer;
+
+    /* Support for formats not supported directly by the renderer */
+    SDL_Texture *native;
+    SDL_SW_YUVTexture *yuv;
+    void *pixels;
+    int pitch;
+    SDL_Rect locked_rect;
+    SDL_Surface *locked_surface;  /**< Locked region exposed as a SDL surface */
+
+    Uint32 last_command_generation; /* last command queue generation this texture was in. */
+
+    void *driverdata;           /**< Driver specific texture representation */
+
+    SDL_Texture *prev;
+    SDL_Texture *next;
+} SDL_Texture_2_0_12;
+
+typedef struct SDL_Texture_2_0_10
+{
+    const void *magic;
+    Uint32 format;              /**< The pixel format of the texture */
+    int access;                 /**< SDL_TextureAccess */
+    int w;                      /**< The width of the texture */
+    int h;                      /**< The height of the texture */
+    int modMode;                /**< The texture modulation mode */
+    SDL_BlendMode blendMode;    /**< The texture blend mode */
+    SDL_ScaleMode scaleMode;    /**< The texture scale mode */
+    Uint8 r, g, b, a;           /**< Texture modulation values */
+
+    SDL_Renderer *renderer;
+
+    /* Support for formats not supported directly by the renderer */
+    SDL_Texture *native;
+    SDL_SW_YUVTexture *yuv;
+    void *pixels;
+    int pitch;
+    SDL_Rect locked_rect;
+
+    Uint32 last_command_generation; /* last command queue generation this texture was in. */
+
+    void *driverdata;           /**< Driver specific texture representation */
+
+    SDL_Texture *prev;
+    SDL_Texture *next;
+} SDL_Texture_2_0_10;
+
+typedef struct SDL_Texture_2_0_9
+{
+    const void *magic;
+    Uint32 format;              /**< The pixel format of the texture */
+    int access;                 /**< SDL_TextureAccess */
+    int w;                      /**< The width of the texture */
+    int h;                      /**< The height of the texture */
+    int modMode;                /**< The texture modulation mode */
+    SDL_BlendMode blendMode;    /**< The texture blend mode */
+    SDL_ScaleMode scaleMode;    /**< The texture scale mode */
+    Uint8 r, g, b, a;           /**< Texture modulation values */
+
+    SDL_Renderer *renderer;
+
+    /* Support for formats not supported directly by the renderer */
+    SDL_Texture *native;
+    SDL_SW_YUVTexture *yuv;
+    void *pixels;
+    int pitch;
+    SDL_Rect locked_rect;
+
+    void *driverdata;           /**< Driver specific texture representation */
+
+    SDL_Texture *prev;
+    SDL_Texture *next;
+} SDL_Texture_2_0_9;
+
+
+typedef struct SDL_Texture_2_0_8
+{
+    const void *magic;
+    Uint32 format;              /**< The pixel format of the texture */
+    int access;                 /**< SDL_TextureAccess */
+    int w;                      /**< The width of the texture */
+    int h;                      /**< The height of the texture */
+    int modMode;                /**< The texture modulation mode */
+    SDL_BlendMode blendMode;    /**< The texture blend mode */
+    Uint8 r, g, b, a;           /**< Texture modulation values */
+
+    SDL_Renderer *renderer;
+
+    /* Support for formats not supported directly by the renderer */
+    SDL_Texture *native;
+    SDL_SW_YUVTexture *yuv;
+    void *pixels;
+    int pitch;
+    SDL_Rect locked_rect;
+
+    void *driverdata;           /**< Driver specific texture representation */
+
+    SDL_Texture *prev;
+    SDL_Texture *next;
+} SDL_Texture_2_0_8;
+
+typedef struct SDL_Texture_2_0_7
+{
+    const void *magic;
+    Uint32 format;              /**< The pixel format of the texture */
+    int access;                 /**< SDL_TextureAccess */
+    int w;                      /**< The width of the texture */
+    int h;                      /**< The height of the texture */
+    int modMode;                /**< The texture modulation mode */
+    SDL_BlendMode blendMode;    /**< The texture blend mode */
+    Uint8 r, g, b, a;           /**< Texture modulation values */
+
+    SDL_Renderer *renderer;
+
+    /* Support for formats not supported directly by the renderer */
+    SDL_Texture *native;
+    SDL_SW_YUVTexture *yuv;
+    void *pixels;
+    int pitch;
+    SDL_Rect locked_rect;
+
+    void *driverdata;           /**< Driver specific texture representation */
+
+    SDL_Texture *prev;
+    SDL_Texture *next;
+} SDL_Texture_2_0_7;
+
+
+// TODO: all the way to 2.0.4
+
+static void* GEOM_GetTextureDriverData(SDL_Texture *texture) {
+    SDL_version linked;
+    SDL_GetVersion(&linked);
+    
+    // hope we're compiling with a compiler with the same ABI
+    // is there a way to test these? e.g. create a texture, look for fields we know
+    if (linked.major == 2 && linked.minor == 0) {
+        if (linked.patch == 12) {
+            return ((SDL_Texture_2_0_12*)texture)->driverdata;
+        }
+        if (linked.patch == 10) {
+            return ((SDL_Texture_2_0_10*)texture)->driverdata;
+        }
+        if (linked.patch == 9) {
+            return ((SDL_Texture_2_0_9*)texture)->driverdata;
+        }
+        if (linked.patch == 8) {
+            return ((SDL_Texture_2_0_8*)texture)->driverdata;
+        }
+        if (linked.patch == 7) {
+            return ((SDL_Texture_2_0_7*)texture)->driverdata;
+        }
+        // TODO: go at least to 2.0.4
+        // if (linked.patch == 6) {
+        //     return ((SDL_Texture_2_0_6*)texture)->driverdata;
+        // }
+        // if (linked.patch == 5) {
+        //     return ((SDL_Texture_2_0_5*)texture)->driverdata;
+        // }
+        // if (linked.patch == 4) {
+        //     return ((SDL_Texture_2_0_4*)texture)->driverdata;
+        // }
+        // if (linked.patch == 3) {
+        //     return ((SDL_Texture_2_0_3*)texture)->driverdata;
+        // }
+        // if (linked.patch == 2) {
+        //     return ((SDL_Texture_2_0_2*)texture)->driverdata;
+        // }
+        // if (linked.patch == 1) {
+        //     return ((SDL_Texture_2_0_1*)texture)->driverdata;
+        // }
+        // if (linked.patch == 0) {
+        //     return ((SDL_Texture_2_0_0*)texture)->driverdata;
+        // }
+    }
+    
+    // TODO: different way to do this? set up thunks on initialization?
+    fprintf(stderr, "Error! don't know to use version %i.%i.%i\n", linked.major, linked.minor, linked.patch);
+    return NULL;
+}
+
 // SDL: put into SDL_pixels.h and add ref in SDL_Color documentation
 SDL_FORCE_INLINE SDL_bool GEOM_ColorEquals(SDL_Color left, SDL_Color right)
 {
